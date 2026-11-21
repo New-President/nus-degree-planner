@@ -838,7 +838,7 @@ const BZA_SRC = {label:"BZA specialisations", url:SOC+"ba/ba-25-26"}, BAIS_SRC =
 const SPECS = {
   cs: Object.fromEntries(Object.entries(CS_FOCUS).map(([n,list])=>[n.toLowerCase().replace(/[^a-z]+/g,"-"),
     spec(`${n} (focus area)`, {label:"CS focus areas", url:"https://www.comp.nus.edu.sg/programmes/ug/focus/"},
-      [{k:"all", name:"Focus area primaries", units:12, reqs:[{label:`3 ${n} primaries, at least one at level 4000`, any:list.filter(c=>c!=="CS2103"), pick:3,
+      [{k:"all", name:"Focus area primaries", units:12, reqs:[{label:`3 ${n} primaries, at least one at level 4000`, any:list.filter(c=>c!=="CS2103"), pick:3, chips:true,
         starter:[...list.filter(c=>c!=="CS2103"&&!/^CS4/.test(c)).slice(0,2), list.find(c=>/^CS4/.test(c))]}],
         checks:[{t:"minCount", label:"At least one at level 4000", any:["@4+"], n:1}]}])])),
   bza: {
@@ -929,5 +929,24 @@ MINORS.mgtmin = {name:"Management", kind:"minor", units:20, share:8, cohort:"Non
   note:"Simplified: business-coded courses count. Check the official list.",
   groups:[{k:"all", name:"Requirements", units:20, pool:["ACC%","BSP%","DAO%","FIN%","MKT%","MNO%","BSN%","BSE%","RE%"]}]};
 
-window.PROGRAMMES = { MAJORS, SECOND, MINORS, RCS, NUSC, DDP };
+/* =====================================================================
+ * Intake year. Programme data is written for the cohorts named in its `cohort` string
+ * ("Cohorts AY2025/26 and AY2026/27", "Admitted AY2021/22 onwards", "... to ..."), so we
+ * derive which intake years that covers and warn when the user's intake is outside it.
+ * A programme may also carry `byIntake: {"2023": prog => patchedProg}`: the patch with the
+ * largest year <= the user's intake is applied, so cohort-specific rules can be added per programme.
+ * ===================================================================== */
+const INTAKES = [2026,2025,2024,2023,2022,2021].map(y=>({y, label:`AY${y}/${String(y+1).slice(2)}`}));
+function coverage(cohort){
+  const ys = [...String(cohort||"").matchAll(/AY(\d{4})\/\d{2}/g)].map(m=>+m[1]);
+  if(!ys.length) return null;
+  const from = Math.min(...ys), to = Math.max(...ys);
+  return {from, to: /onwards/i.test(cohort) ? Infinity : to};
+}
+function forIntake(prog, y){
+  if(!prog || !y || !prog.byIntake) return prog;
+  const k = Object.keys(prog.byIntake).map(Number).filter(n=>n<=y).sort((a,b)=>b-a)[0];
+  return k==null ? prog : prog.byIntake[k](prog);
+}
+window.PROGRAMMES = { MAJORS, SECOND, MINORS, RCS, NUSC, DDP, INTAKES, coverage, forIntake };
 })();

@@ -1,5 +1,17 @@
 # NUS Degree Planner
 
+## What's different from the original
+
+This is a fork of [LucasChen1108/nus-degree-planner](https://github.com/LucasChen1108/nus-degree-planner) (via [kin-chong](https://github.com/kin-chong/nus-degree-planner)). On top of the original it adds:
+
+- **Exempted credits:** enter polytechnic or A-level credit as a bulk number of Unrestricted Elective units that count as completed
+- **Exempted modules:** mark specific courses as exempted. They count as completed toward the requirement they match, satisfy prerequisites from your first semester, and take no semester slot. Drag courses in or out of the section
+- **Exemptions with or without credit:** a "Credit awarded" option. Exemptions without credit only satisfy prerequisites and add no units
+- **Intake year picker:** choose your intake (AY2021/22 to AY2026/27). It is saved with your plan, shown in the header, and flags programmes whose requirements were written for other cohorts. Requirements are not yet different per intake, but programmes can now carry cohort-specific overrides
+- **Economics minor:** MA1521, ST3131 and the rest of the EC-recognised course list count automatically toward the minor's capped 4-unit EC-recognised slot, and can also count toward your major
+- **Focus-area chips:** one-click primary-module chips for every CS focus area you are tracking, and on each focus-area specialisation card
+- **Layout fixes:** the "Missing" badge no longer renders as a stretched disc, and the `pl` (planned) counter in card headers stays on one line
+
 A free, single-page 4-year degree planner for NUS students.
 
 - **56 majors across 5 faculties:**

@@ -116,7 +116,8 @@ button{cursor:pointer}
 
 /* exempted modules */
 .exm{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:8px}
-.exm .adder{max-width:420px}
+.exm .adder{max-width:560px;flex-wrap:wrap}
+.exm-credit{display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);white-space:nowrap}
 .exm .adder input#exm-units{flex:none;width:96px;font-family:var(--f-body);text-transform:none}
 .exm.drop-target{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .exm-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
@@ -130,13 +131,15 @@ button{cursor:pointer}
 .rail{display:flex;flex-direction:column;gap:10px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow:auto;padding-right:2px}
 .req{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:8px}
 .req-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.req-h .n{font-size:.82rem;color:var(--muted)}
+.req-h .n{font-size:.82rem;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.req-h h2{min-width:0}
 .req-h .n b{color:var(--ink)}
 .mini{height:6px;background:var(--sunk);border-radius:3px;position:relative;overflow:hidden}
 .mini .pl{position:absolute;inset:0 auto 0 0;background:var(--navy-soft)}
 .mini .dn{position:absolute;inset:0 auto 0 0;background:var(--accent)}
 .sub{display:flex;flex-direction:column;gap:3px;font-size:.8rem}
-.sub div{display:flex;justify-content:space-between;gap:8px}
+.sub div{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.sub .pill{flex-shrink:0;align-self:flex-start}
 .sub .lbl{color:var(--muted);min-width:0}
 .pill{font-size:.7rem;font-weight:600;padding:1px 7px;border-radius:999px;white-space:nowrap}
 .pill.done{background:var(--ok-soft);color:var(--ok)}
@@ -240,6 +243,7 @@ body.is-dragging *{cursor:grabbing!important}
       <details class="multi" id="spec-dd"><summary id="spec-sum" aria-labelledby="spec-lbl spec-sum">None yet</summary><div class="multi-pop" id="spec-list" role="group" aria-label="Specialisations"></div></details></div>
     <label for="ddp-sel">Double degree<select id="ddp-sel"></select></label>
     <label for="rc-sel">Residential college<select id="rc-sel"></select></label>
+    <label for="in-sel">Intake year<select id="in-sel"></select></label>
     <label for="ex-in">Exempted credits<input id="ex-in" type="number" min="0" max="160" step="1" inputmode="numeric" placeholder="0 (e.g. polytechnic)"></label>
     <p class="prog-note" id="prog-note" hidden></p>
   </section>
@@ -343,9 +347,10 @@ function phOf(code){
 }
 function ph(code,done){ const p=phOf(code); return mk(code,done,{title:p.title, tag:p.tag||"", bucket:p.bucket||"auto"}); }
 let state = null;
+const intakeYear = ()=> +(state && state.intake) || 0;
 function baseMajor(){
   if(state.major==="custom") return customProgramme();
-  return P.MAJORS[state.major] || P.MAJORS.cs;
+  return P.forIntake(P.MAJORS[state.major] || P.MAJORS.cs, intakeYear());
 }
 function applyRC(prog, rc){
   if(!rc || !P.RCS[rc]) return prog;
@@ -392,7 +397,7 @@ const extras = ()=> {
   const out = [];
   curSpecs().forEach(({k,prog})=>out.push({k:"spec:"+k, prog}));
   const d = state.ddp && ddpProgramme(); if(d) out.push({k:"ddp", prog:d});
-  [state.second, ...(state.minors||[])].filter(k=>k && EXTRA[k]).forEach(k=>out.push({k, prog:EXTRA[k]}));
+  [state.second, ...(state.minors||[])].filter(k=>k && EXTRA[k]).forEach(k=>out.push({k, prog:P.forIntake(EXTRA[k], intakeYear())}));
   return out;
 };
 const KIND = {spec:["Specialisation","Spec"], ddp:["Double Degree","DD"], minor:["Minor","Min"], second:["Second Major","2M"]};
@@ -441,7 +446,8 @@ function exemptCourse(){
 function ordered(){
   const out=[], ex=exemptCourse();
   if(ex) out.push({c:ex, t:null});
-  (state.exemptMods||[]).forEach(c=>out.push({c, t:null}));
+  /* exemptions without awarded credit only waive prerequisites (see issues()); they add no units */
+  (state.exemptMods||[]).filter(c=>c.credit!==false).forEach(c=>out.push({c, t:null}));
   TERMS.forEach(t=> (state.terms[t.id]||[]).forEach(c=>out.push({c,t:t.id})));
   return out;
 }
@@ -679,10 +685,17 @@ function groupBody(G, inPlan){
   if(rows) html += `<div class="sub">${rows}</div>`;
   if(chips) html += `<div class="chips">${chips}</div>`;
   if(G.focus){
-    const best = G.focus.filter(f=>!f.ok).slice(0,1)[0] || G.focus[0];
-    const fa = G.focus.find(f=>f.ok) || best;
-    html += `<div class="eyebrow">${esc(fa.name)} primaries</div><div class="chips">${fa.list.filter(k=>k!=="CS2103").map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
+    /* every focus area being tracked (same set as the rows above), or the closest one if none started */
+    const tracked = G.focus.filter(f=>f.n>0).slice(0,3);
+    (tracked.length ? tracked : G.focus.slice(0,1)).forEach(fa=>{
+      html += `<div class="eyebrow">${esc(fa.name)} primaries</div><div class="chips">${fa.list.filter(k=>k!=="CS2103").map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
+    });
   }
+  /* requirement rows that carry a course list (e.g. a focus-area specialisation): one-click chips */
+  G.slots.forEach(s=>{
+    if(!s.r.chips) return;
+    html += `<div class="eyebrow">Primaries</div><div class="chips">${s.r.any.filter(concrete).map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
+  });
   const sug = (G.g.suggest||[]).filter(k=>!inPlan(k)).slice(0,6);
   if(sug.length) html += `<div class="eyebrow">Ideas</div><div class="chips">${sug.map(k=>addChip(k)).join("")}</div>`;
   if(G.g.hint) html += `<div class="sub"><span class="lbl">${esc(G.g.hint)}</span></div>`;
@@ -699,7 +712,9 @@ function render(){
   const TOTAL = M.units;
 
   /* header + pickers */
-  $("#deg-line").textContent = `${M.degree} · ${M.cohort} · ${TOTAL} units${state.rc?` · ${P.RCS[state.rc].name}`:""}`;
+  const iy = intakeYear(), iLbl = iy ? `AY${iy}/${String(iy+1).slice(2)}` : "";
+  $("#deg-line").textContent = `${M.degree} · ${M.cohort}${iLbl?` · Your intake ${iLbl}`:""} · ${TOTAL} units${state.rc?` · ${P.RCS[state.rc].name}`:""}`;
+  $("#in-sel").value = iy ? String(iy) : "";
   $("#rc-sel").value = state.rc||"";
   if(document.activeElement!==$("#ex-in")) $("#ex-in").value = state.exempt||"";
   const specs = baseMajor().specs || {};
@@ -715,9 +730,12 @@ function render(){
   const og = (label,list)=> list.length ? `<optgroup label="${esc(label)}">${list.sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k,p])=>`<option value="${k}">${esc(p.degree||p.name)}</option>`).join("")}</optgroup>` : "";
   $("#ddp-sel").innerHTML = `<option value="">None</option>` + og("Specially designed double degrees", designed) + og("Other combinations (ad hoc, needs approval)", others);
   $("#ddp-sel").value = state.ddp||"";
-  $("#prog-note").innerHTML = M.custom ? `Custom programme. <button type="button" class="linkbtn" id="edit-custom">Edit requirements</button>`
-    : M.simplified ? `This major is simplified: its elective rules are matched by course prefix. Check your department's page for the exact course lists.` : "";
-  $("#prog-note").hidden = !(M.custom || M.simplified);
+  /* intake year outside the cohorts a programme's data was written for */
+  const offCohort = iy ? [M, ...X.map(x=>x.prog)].filter(p=>{ const cv=P.coverage(p.cohort); return cv && !p.custom && (iy<cv.from || iy>cv.to); }) : [];
+  const intakeNote = offCohort.length ? `Your intake (${iLbl}) is outside the cohorts these requirements were written for: ${offCohort.map(p=>`${esc(p.name)} (${esc(p.cohort)})`).join("; ")}. Rules may differ, so check your EduRec audit.` : "";
+  $("#prog-note").innerHTML = [M.custom ? `Custom programme. <button type="button" class="linkbtn" id="edit-custom">Edit requirements</button>`
+    : M.simplified ? `This major is simplified: its elective rules are matched by course prefix. Check your department's page for the exact course lists.` : "", intakeNote].filter(Boolean).join(" ");
+  $("#prog-note").hidden = !$("#prog-note").innerHTML;
   $("#maj-sel").value = state.major;
   $("#sm-sel").value = state.second||"";
   [0,1,2].forEach(i=>{ $("#mn-sel"+i).value = (state.minors||[])[i]||""; });
@@ -813,10 +831,10 @@ function render(){
 
   /* exempted modules */
   const em = state.exemptMods||[];
-  $("#exm").innerHTML = `<div class="req-h"><h2>Exempted modules</h2><span class="n tnum"><b>${U(em)}</b> units</span></div>
-    <p class="note">Courses you are exempted from (e.g. polytechnic or A-level credit). They count as completed toward whichever requirement they match, and satisfy prerequisites, without taking a semester slot. Drag courses in or out to move them between here and your semesters.</p>
-    ${em.length?`<div class="exm-list">${em.map(c=>`<div class="course is-done" data-id="${c.id}"><span class="grip" data-drag="${c.id}" title="Drag to move" aria-hidden="true">${GRIP}</span><span class="tick-s" aria-hidden="true">${TICK}</span><div class="c-body" style="cursor:inherit"><span class="c-code">${esc(c.code)}</span><span class="c-title">${esc(c.title||"")}</span></div><span class="c-side"><span class="c-u tnum">${c.units}u</span><button type="button" class="exm-del" data-exm-del="${c.id}" aria-label="Remove exempted ${esc(c.code)}">×</button></span></div>`).join("")}</div>`:`<div class="empty">None yet. Add a code below, or drag a course here from a semester.</div>`}
-    <form class="adder" id="exm-form"><input id="exm-code" list="catalog" placeholder="Add exempted course code" autocomplete="off" aria-label="Exempted course code"><input id="exm-units" type="number" min="0" max="40" step="1" placeholder="Units (auto)" aria-label="Units"><button type="submit" aria-label="Add">+</button></form>`;
+  $("#exm").innerHTML = `<div class="req-h"><h2>Exempted modules</h2><span class="n tnum"><b>${U(em.filter(c=>c.credit!==false))}</b> units</span></div>
+    <p class="note">Courses you are exempted from (e.g. polytechnic or A-level credit). Exemptions <b>with credit</b> count as completed toward whichever requirement they match. Exemptions <b>without credit</b> only satisfy prerequisites and add no units. Both unlock prerequisites from your first semester, without taking a semester slot. Drag courses in or out to move them between here and your semesters. For a bulk block of credit that matches no specific course, use Exempted credits above.</p>
+    ${em.length?`<div class="exm-list">${em.map(c=>`<div class="course is-done" data-id="${c.id}"><span class="grip" data-drag="${c.id}" title="Drag to move" aria-hidden="true">${GRIP}</span><span class="tick-s" aria-hidden="true">${TICK}</span><div class="c-body" style="cursor:inherit"><span class="c-code">${esc(c.code)}</span><span class="c-title">${esc(c.title||"")}</span></div><span class="c-side"><span class="c-u tnum">${c.credit===false?"no credit":c.units+"u"}</span><button type="button" class="exm-del" data-exm-del="${c.id}" aria-label="Remove exempted ${esc(c.code)}">×</button></span></div>`).join("")}</div>`:`<div class="empty">None yet. Add a code below, or drag a course here from a semester.</div>`}
+    <form class="adder" id="exm-form"><input id="exm-code" list="catalog" placeholder="Add exempted course code" autocomplete="off" aria-label="Exempted course code"><input id="exm-units" type="number" min="0" max="40" step="1" placeholder="Units (auto)" aria-label="Units"><label class="exm-credit"><input type="checkbox" id="exm-credit" checked> Credit awarded</label><button type="submit" aria-label="Add">+</button></form>`;
 
   /* years */
   let yh="";
@@ -880,7 +898,7 @@ function nextOpenTerm(){
   return "Y4S2";
 }
 
-function addExemptMod(raw, uraw){
+function addExemptMod(raw, uraw, credit){
   const code = raw.trim().toUpperCase().split(/\s+/)[0];
   if(!code) return;
   if(!/\d/.test(code) || phOf(code)){ toast("Enter a specific course code, e.g. CS1010"); return; }
@@ -888,10 +906,11 @@ function addExemptMod(raw, uraw){
   const c = mk(code, true);
   const u = parseFloat(uraw);
   if(uraw!=="" && u>=0) c.units = u;
+  if(credit===false) c.credit = false;
   const untouched = isUntouchedStarter();
   state.exemptMods = [...(state.exemptMods||[]), c];
   if(untouched){
-    const keep={second:state.second, minors:state.minors, rc:state.rc, exempt:state.exempt,exemptMods:state.exemptMods, custom:state.custom, specs:state.specs, ddp:state.ddp, current:state.current};
+    const keep={second:state.second, minors:state.minors, rc:state.rc, intake:state.intake,exempt:state.exempt,exemptMods:state.exemptMods, custom:state.custom, specs:state.specs, ddp:state.ddp, current:state.current};
     state = withStarter(state.major, keep);
   } else {
     Object.keys(state.terms).forEach(t=>{ state.terms[t]=state.terms[t].filter(x=>x.code!==code); });
@@ -979,13 +998,13 @@ function endDrag(commit){
     if(!f) return;
     if(isPh(c)){ toast("Only specific courses can be marked as exempted"); return; }
     state.terms[f.t].splice(f.i,1);
-    c.done=true; c.prog=false;
+    c.done=true; c.prog=false; delete c.credit;
     state.exemptMods=[...(state.exemptMods||[]), c];
     save(); render(); toast(`${c.code} marked as exempted`);
     return;
   }
   const to=d.target.term;
-  if(f) state.terms[f.t].splice(f.i,1); else { state.exemptMods.splice(xi,1); c.done=false; c.prog=false; }
+  if(f) state.terms[f.t].splice(f.i,1); else { state.exemptMods.splice(xi,1); c.done=false; c.prog=false; delete c.credit; }
   const arr=(state.terms[to]=state.terms[to]||[]);
   arr.splice(Math.min(d.target.idx,arr.length),0,c);
   if(TERMS[TERM_IDX[to]].st) state.showST[to]=true;
@@ -1016,7 +1035,7 @@ document.addEventListener("click", e=>{
 document.addEventListener("submit", e=>{
   if(e.target.id==="exm-form"){
     e.preventDefault();
-    addExemptMod($("#exm-code").value, $("#exm-units").value);
+    addExemptMod($("#exm-code").value, $("#exm-units").value, $("#exm-credit").checked);
     $("#exm-code").focus();
     return;
   }
@@ -1080,6 +1099,7 @@ function fillPickers(){
   Object.entries(P.MAJORS).forEach(([k,p])=>{ (fac[p.faculty]=fac[p.faculty]||[]).push([k,p]); });
   $("#maj-sel").innerHTML = Object.entries(fac).map(([f,list])=>`<optgroup label="${esc(f)}">${list.sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k,p])=>opt(k,p)).join("")}</optgroup>`).join("")
     + `<optgroup label="Other"><option value="custom">Other programme (enter your own requirements)…</option></optgroup>`;
+  $("#in-sel").innerHTML = `<option value="">Latest (default)</option>` + P.INTAKES.map(i=>`<option value="${i.y}">${i.label}</option>`).join("");
   $("#rc-sel").innerHTML = Object.entries(P.RCS).map(([k,r])=>`<option value="${k}">${esc(r.name)}</option>`).join("");
   const grouped = obj => {
     const g = {};
@@ -1094,7 +1114,7 @@ $("#maj-sel").onchange=e=>{
   if(e.target.value==="custom"){ state.major="custom"; if(!state.custom) state.custom={name:"",units:160,text:""}; save(); render(); customDialog(); return; }
   if(isUntouchedStarter()){
     const sp = P.MAJORS[e.target.value] && P.MAJORS[e.target.value].specs || {};
-    const keep={second:state.second, minors:state.minors, rc:state.rc, exempt:state.exempt,exemptMods:state.exemptMods, custom:state.custom, specs:(state.specs||[]).filter(k=>sp[k]), ddp:state.ddp!==e.target.value?state.ddp:null};
+    const keep={second:state.second, minors:state.minors, rc:state.rc, intake:state.intake,exempt:state.exempt,exemptMods:state.exemptMods, custom:state.custom, specs:(state.specs||[]).filter(k=>sp[k]), ddp:state.ddp!==e.target.value?state.ddp:null};
     state = withStarter(e.target.value, keep);
   }
   state.major=e.target.value;
@@ -1109,7 +1129,7 @@ function switchExtra(field, value, msg){
   const untouched = isUntouchedStarter();
   state[field] = Array.isArray(value) ? value : (value||null);
   if(untouched){
-    const keep={second:state.second, minors:state.minors, rc:state.rc, exempt:state.exempt,exemptMods:state.exemptMods, custom:state.custom, specs:state.specs, ddp:state.ddp, current:state.current};
+    const keep={second:state.second, minors:state.minors, rc:state.rc, intake:state.intake,exempt:state.exempt,exemptMods:state.exemptMods, custom:state.custom, specs:state.specs, ddp:state.ddp, current:state.current};
     state = withStarter(state.major, keep);
   }
   save(); render(); toast((typeof msg==="function"?msg():msg) + (untouched ? ". Sample plan updated" : ""));
@@ -1123,6 +1143,10 @@ $("#spec-list").addEventListener("change", e=>{
 });
 document.addEventListener("click", e=>{ const d=$("#spec-dd"); if(d.open && !d.contains(e.target)) d.open=false; });
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") $("#spec-dd").open=false; });
+$("#in-sel").onchange=e=>{
+  state.intake = e.target.value || ""; save(); render();
+  toast(state.intake ? `Intake set to AY${state.intake}/${String(+state.intake+1).slice(2)}` : "Intake year cleared: showing the latest cohort");
+};
 $("#ex-in").onchange=e=>{
   const n = Math.max(0, Math.min(major().units, Math.floor(+e.target.value) || 0));
   state.exempt = n; e.target.value = n||""; save(); render();
@@ -1175,8 +1199,8 @@ $("#btn-reset").onclick=()=>{
   openDlg(`<h2>Reset the planner</h2><p style="margin:0;color:var(--muted)">This replaces everything on the page. Export first if you want a copy. The sample plan places every required course for ${esc(major().name)} across 4 years; you add your electives.</p>
     <div class="dlg-f"><button type="button" class="btn" id="r-cancel">Cancel</button><div><button type="button" class="btn" id="r-clear">Start empty</button><button type="button" class="btn primary" id="r-sample">Load sample plan</button></div></div>`);
   $("#r-cancel").onclick=closeDlg;
-  $("#r-clear").onclick=()=>{ state={v:2,major:state.major,second:state.second,minors:state.minors||[],specs:state.specs||[],rc:state.rc,exempt:state.exempt,exemptMods:state.exemptMods,custom:state.custom,showST:{},terms:{}}; save(); render(); closeDlg(); toast("Planner cleared"); };
-  $("#r-sample").onclick=()=>{ state=withStarter(state.major,{second:state.second,minors:state.minors,rc:state.rc,exempt:state.exempt,exemptMods:state.exemptMods,custom:state.custom,specs:state.specs,ddp:state.ddp}); save(); render(); closeDlg(); toast("Sample plan loaded. Switch major above to see another major's sample"); };
+  $("#r-clear").onclick=()=>{ state={v:2,major:state.major,second:state.second,minors:state.minors||[],specs:state.specs||[],rc:state.rc,intake:state.intake,exempt:state.exempt,exemptMods:state.exemptMods,custom:state.custom,showST:{},terms:{}}; save(); render(); closeDlg(); toast("Planner cleared"); };
+  $("#r-sample").onclick=()=>{ state=withStarter(state.major,{second:state.second,minors:state.minors,rc:state.rc,intake:state.intake,exempt:state.exempt,exemptMods:state.exemptMods,custom:state.custom,specs:state.specs,ddp:state.ddp}); save(); render(); closeDlg(); toast("Sample plan loaded. Switch major above to see another major's sample"); };
 };
 $("#btn-io").onclick=()=>{
   openDlg(`<h2>Export / Import</h2><label>Your plan as text. Copy it to back up, or paste a saved plan and press Import.<textarea id="io-t">${esc(JSON.stringify(state))}</textarea></label>
@@ -1199,6 +1223,7 @@ function normalize(s){
   s.exemptMods=(s.exemptMods||[]).filter(c=>c&&c.code).map(c=>Object.assign({id:uid(),title:"",units:4,bucket:"auto",tag:""},c,{done:true}));
   if(!P.MAJORS[s.major] && s.major!=="custom") s.major="cs";
   if(!P.RCS[s.rc||""]) s.rc="";
+  s.intake = P.INTAKES.some(i=>String(i.y)===String(s.intake)) ? String(s.intake) : "";
   if(s.second==="math") s.second="ma2";
   if(s.second && !P.SECOND[s.second]) s.second=null;
   s.minors=(s.minors||[]).filter(k=>P.MINORS[k]);
