@@ -392,6 +392,7 @@ function ddpProgramme(){
   return {name:p.degree||p.name, kind:"ddp", units:groups.reduce((a,g)=>a+g.units,0), share:P.DDP.share, cohort:p.cohort, sources:[...(p.sources||[]), P.DDP.source],
     groups, designed:isDesigned(state.major, state.ddp), simplified:p.simplified};
 }
+const chosenFocusNames = ()=> curSpecs().filter(x=>/ \(focus area\)$/.test(x.prog.name)).map(x=>x.prog.name.replace(/ \(focus area\)$/,""));
 const curSpecs = ()=> { const sp = baseMajor().specs || {}; return (state.specs||[]).filter(k=>sp[k]).map(k=>({k, prog:sp[k]})); };
 const extras = ()=> {
   const out = [];
@@ -556,7 +557,9 @@ function runCheck(ch,G,all){
       return {name, n:got.length, ok, okd, list};
     }).sort((a,b)=>(b.ok-a.ok)||(b.n-a.n));
     const any = res.some(r=>r.ok);
-    const shown = res.filter(r=>r.n>0).slice(0,3);
+    /* with focus-area specialisations picked, track and recommend only those */
+    const picked = chosenFocusNames();
+    const shown = picked.length ? res.filter(r=>picked.includes(r.name)) : res.filter(r=>r.n>0).slice(0,3);
     const rows = (shown.length?shown:res.slice(0,1)).map(r=>({label:`Focus: ${r.name} (${r.n}/3)`, pl:r.ok, dn:r.okd, soft:!r.ok && any}));
     if(!any) rows[0].gap = "No focus area complete yet (3 primaries, one at level 4000)";
     G.focus = res;
@@ -686,7 +689,8 @@ function groupBody(G, inPlan){
   if(chips) html += `<div class="chips">${chips}</div>`;
   if(G.focus){
     /* every focus area being tracked (same set as the rows above), or the closest one if none started */
-    const tracked = G.focus.filter(f=>f.n>0).slice(0,3);
+    const picked = chosenFocusNames();
+    const tracked = picked.length ? G.focus.filter(f=>picked.includes(f.name)) : G.focus.filter(f=>f.n>0).slice(0,3);
     (tracked.length ? tracked : G.focus.slice(0,1)).forEach(fa=>{
       html += `<div class="eyebrow">${esc(fa.name)} primaries</div><div class="chips">${fa.list.filter(k=>k!=="CS2103").map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
     });
@@ -696,7 +700,10 @@ function groupBody(G, inPlan){
     if(!s.r.chips) return;
     html += `<div class="eyebrow">Primaries</div><div class="chips">${s.r.any.filter(concrete).map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
   });
-  const sug = (G.g.suggest||[]).filter(k=>!inPlan(k)).slice(0,6);
+  /* elective groups recommend from the chosen specialisation(s) when there are any (groups with focus-area
+     chips keep their own suggestions, e.g. Industry Experience) */
+  const specSug = G.g.suggest && !G.focus ? [...new Set(curSpecs().flatMap(({prog})=>prog.groups.flatMap(g=>(g.reqs||[]).flatMap(r=>(r.any||[]).filter(concrete)))))] : [];
+  const sug = (specSug.length ? specSug : (G.g.suggest||[])).filter(k=>!inPlan(k)).slice(0,8);
   if(sug.length) html += `<div class="eyebrow">Ideas</div><div class="chips">${sug.map(k=>addChip(k)).join("")}</div>`;
   if(G.g.hint) html += `<div class="sub"><span class="lbl">${esc(G.g.hint)}</span></div>`;
   return html;
@@ -884,7 +891,7 @@ function addCourse(term, raw, open){
   state.starter=false; save(); render();
   if(nm){
     ensureDetail(code).then(d=>{
-      if(d){ if(!CATMAP[code]) c.units = d.mc; c.title = c.title || d.title; save(); }
+      if(d){ if(d.mc>0) c.units = d.mc; c.title = c.title || d.title; save(); }
       render();
       const w = issues(c, find(c.id) ? find(c.id).t : term);
       toast(`Added ${code} · ${c.title}${w.length?` · ${w[0]}`:""}`);
@@ -905,7 +912,7 @@ function addExemptMod(raw, uraw, credit){
   if((state.exemptMods||[]).some(c=>c.code===code)){ toast(`${code} is already exempted`); return; }
   const c = mk(code, true);
   const u = parseFloat(uraw);
-  if(uraw!=="" && u>=0) c.units = u;
+  if(uraw!=="" && u>0){ c.units = u; c.uEdited = true; }   /* blank or 0 = auto, so the module always fills its requirement */
   if(credit===false) c.credit = false;
   const untouched = isUntouchedStarter();
   state.exemptMods = [...(state.exemptMods||[]), c];
@@ -917,7 +924,7 @@ function addExemptMod(raw, uraw, credit){
   }
   save(); render();
   toast(`${code} marked as exempted${untouched?". Sample plan updated":""}`);
-  if(uraw==="" && !CATMAP[code] && NM.byCode[code]) ensureDetail(code).then(d=>{ if(d){ c.units=d.mc; c.title=c.title||d.title; save(); render(); } });
+  if((uraw==="" || !(u>0)) && NM.byCode[code]) ensureDetail(code).then(d=>{ if(d){ if(d.mc>0) c.units=d.mc; c.title=c.title||d.title; save(); render(); } });
 }
 
 /* ---------- drag and drop (pointer events: mouse drags the whole row, touch uses the grip) ---------- */
@@ -998,7 +1005,7 @@ function endDrag(commit){
     if(!f) return;
     if(isPh(c)){ toast("Only specific courses can be marked as exempted"); return; }
     state.terms[f.t].splice(f.i,1);
-    c.done=true; c.prog=false; delete c.credit;
+    c.done=true; c.prog=false; delete c.credit; if(!(+c.units>0)) c.units=unitsOf(c.code);
     state.exemptMods=[...(state.exemptMods||[]), c];
     save(); render(); toast(`${c.code} marked as exempted`);
     return;
@@ -1085,7 +1092,7 @@ function editDialog(id, isNew){
   $("#e-del").onclick=()=>{ state.terms[f.t].splice(f.i,1); save(); render(); closeDlg(); toast(`Removed ${c.code}`); };
   $("#e-save").onclick=()=>{
     const code=$("#e-code").value.trim().toUpperCase()||c.code;
-    c.code=code; c.title=$("#e-title").value.trim(); c.units=Math.max(0,+$("#e-units").value||0);
+    c.code=code; c.title=$("#e-title").value.trim(); { const nu=Math.max(0,+$("#e-units").value||0); if(nu!==c.units) c.uEdited=true; c.units=nu; }
     c.bucket=$("#e-bucket").value; c.tag=$("#e-tag").value; c.done=$("#e-done").value==="1"; c.prog=$("#e-done").value==="2";
     const nt=$("#e-term").value;
     if(nt!==f.t){ state.terms[f.t].splice(f.i,1); (state.terms[nt]=state.terms[nt]||[]).push(c); if(TERMS[TERM_IDX[nt]].st) state.showST[nt]=true; }
@@ -1221,6 +1228,8 @@ const LS="nus-cs-planner-v1";
 function normalize(s){
   s.showST=s.showST||{}; s.terms=s.terms||{}; s.exempt=Math.max(0,Math.floor(+s.exempt)||0);
   s.exemptMods=(s.exemptMods||[]).filter(c=>c&&c.code).map(c=>Object.assign({id:uid(),title:"",units:4,bucket:"auto",tag:""},c,{done:true}));
+  /* an exempted course stored with 0 units would never fill its requirement: restore its real unit count */
+  s.exemptMods.forEach(c=>{ if(!(+c.units>0)) c.units = (CATMAP[c.code] && CATMAP[c.code].units) || 4; });
   if(!P.MAJORS[s.major] && s.major!=="custom") s.major="cs";
   if(!P.RCS[s.rc||""]) s.rc="";
   s.intake = P.INTAKES.some(i=>String(i.y)===String(s.intake)) ? String(s.intake) : "";
@@ -1260,7 +1269,10 @@ async function loadList(){
 function applyList(ay,list){
   NM.ay=ay; NM.list=list; NM.status="ok";
   list.forEach(m=>{ NM.byCode[m[0]]={title:m[1],sems:m[2]}; });
-  const d=lsGet("nm-detail-"+ay); if(d) NM.detail=d;
+  /* cached module details (units, prerequisites) expire after 3 days, like the list does after 7 */
+  const dt=lsGet("nm-detail-t-"+ay), d=lsGet("nm-detail-"+ay);
+  if(d && dt && Date.now()-dt<3*DAY) NM.detail=d;
+  else { try{ localStorage.removeItem("nm-detail-t-"+ay); localStorage.removeItem("nm-detail-"+ay); }catch(_){} }
   const dl=$("#catalog");
   dl.innerHTML = Object.keys(PH).map(k=>`<option value="${k}">${esc(PH[k].title)}</option>`).join("") + list.map(m=>`<option value="${m[0]}">${esc(m[1])}</option>`).join("");
   setNMStatus(); render(); prefetchPlan();
@@ -1284,7 +1296,7 @@ function ensureDetail(code){
     .then(r=>r.ok?r.json():null).then(m=>{
       if(!m) return null;
       NM.detail[code]=trimDetail(m);
-      clearTimeout(saveDetailTimer); saveDetailTimer=setTimeout(()=>lsSet("nm-detail-"+NM.ay,NM.detail),800);
+      clearTimeout(saveDetailTimer); saveDetailTimer=setTimeout(()=>{ lsSet("nm-detail-"+NM.ay,NM.detail); if(!lsGet("nm-detail-t-"+NM.ay)) lsSet("nm-detail-t-"+NM.ay,Date.now()); },800);
       return NM.detail[code];
     }).catch(()=>null).finally(()=>{ delete NM.pending[code]; });
 }
@@ -1293,6 +1305,8 @@ async function prefetchPlan(){
   for(let i=0;i<codes.length;i+=6) await Promise.all(codes.slice(i,i+6).map(ensureDetail));
   let changed=false;
   ordered().forEach(({c})=>{ const d=NM.detail[c.code]; if(d && !c.title){ c.title=d.title; changed=true; } });
+  /* live unit counts win over the built-in list and old saved plans, except where the user set the units by hand */
+  ordered().forEach(({c})=>{ const d=NM.detail[c.code]; if(c.code!=="EXEMPT" && d && d.mc>0 && !c.uEdited && +c.units!==d.mc){ c.units=d.mc; changed=true; } });
   if(changed) save();
   render();
 }

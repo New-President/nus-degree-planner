@@ -1,0 +1,58 @@
+name: Check requirement sources
+
+# Weekly (Mondays 02:00 UTC), and on demand from the Actions tab.
+# Runs scripts/check-requirements.mjs. If a source page's course codes or unit counts changed, or a course
+# code in programmes.js disappeared from NUSMods, it opens (or updates) one pull request that refreshes the
+# baseline files and lists exactly what changed. It never edits programmes.js: a person does that on the PR branch.
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: check-requirements
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run the check and refresh the baseline
+        # The script exits 1 when it finds changes; that is the expected case here, not a failure.
+        run: node scripts/check-requirements.mjs --update --report "$RUNNER_TEMP/report.txt" || true
+
+      - name: Write the pull request description
+        run: |
+          {
+            echo "Automated check of the sources behind \`programmes.js\`."
+            echo
+            echo "**Before merging:** read each changed page below and update \`programmes.js\` on this branch if the requirements changed. Merging as-is only accepts the new baseline, so the changes will not be reported again."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/report.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Open or update the pull request
+        # Does nothing when the baseline files are unchanged.
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bot/requirements-check
+          base: main
+          add-paths: |
+            scripts/source-hashes.json
+            scripts/known-missing-codes.json
+          commit-message: "Update requirement source baseline"
+          title: "Requirement sources changed: review programmes.js"
+          body-path: ${{ runner.temp }}/pr-body.md
+          delete-branch: true

@@ -41,7 +41,24 @@ A free, single-page 4-year degree planner for NUS students.
 | --- | --- |
 | `index.html` | The whole app: layout, requirement engine, drag and drop, NUSMods connection |
 | `programmes.js` | Requirement data for every major, second major, minor and residential college, with links to the official sources. Majors marked `simplified` match electives by course prefix |
+| `scripts/check-requirements.mjs` | Checks whether `programmes.js` may be out of date (see below). Never edits it |
+| `scripts/source-hashes.json` | Baseline for that check: the course codes and unit counts last seen on each source page |
+| `scripts/known-missing-codes.json` | Course codes in `programmes.js` already known to be missing from NUSMods, so the check only reports new ones |
+| `.github/workflows/check-requirements.yml` | The weekly bot that runs the check and opens a pull request when something changed |
 | `.nojekyll` | Tells GitHub Pages to serve the files as they are |
+
+## Keeping requirements up to date
+
+Course data (codes, titles, units, prerequisites, offered semesters) is live from NUSMods and cached in the browser: the module list for 7 days, per-course details for 3. Degree requirements are not available from any API, so they are written by hand in `programmes.js`. To spot when they drift:
+
+```
+node scripts/check-requirements.mjs            # compare with the saved baseline (Node 18+)
+node scripts/check-requirements.mjs --update   # after updating programmes.js, save a new baseline
+```
+
+It reports source pages whose course codes or unit counts changed (with what was added or removed), pages that no longer load, and course codes in `programmes.js` that no longer exist in NUSMods for the last three academic years. It exits with code 1 when it finds something. A GitHub Actions workflow (`.github/workflows/check-requirements.yml`) runs this every Monday and can be started by hand from the Actions tab. When something changed it opens a single pull request on the `bot/requirements-check` branch that refreshes the baseline files and lists what changed in the description. It never edits `programmes.js`: update that on the PR branch before merging, because merging only accepts the new baseline. Course codes already known to be missing are kept in `scripts/known-missing-codes.json` so they are not reported every week.
+
+About half the source pages are rendered by JavaScript or are landing pages with no course codes, so changes on those cannot be detected; check them manually each semester.
 
 ## Adding or fixing a programme
 
