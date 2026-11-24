@@ -202,7 +202,10 @@ body.is-dragging *{cursor:grabbing!important}
 .dlg label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--muted)}
 .dlg input,.dlg select,.dlg textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 9px;color:var(--ink);font-size:.9rem}
 .dlg textarea{font-family:var(--f-mono);font-size:.75rem;min-height:180px}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dlg>*{min-width:0}
+.dlg label{min-width:0}
+.dlg input,.dlg select{width:100%;min-width:0;box-sizing:border-box;text-overflow:ellipsis}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .dlg-f{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .dlg-f div{display:flex;gap:8px}
 .dlg a{color:var(--navy)}
@@ -1079,14 +1082,14 @@ function editDialog(id, isNew){
         ${d.pc?`<div><b>Preclusions:</b> ${esc(d.pc)}</div>`:""}</div>`; })()}
     <div class="row2"><label>Code<input id="e-code" value="${esc(c.code)}"></label><label>Units<input id="e-units" type="number" min="0" max="40" step="1" value="${esc(c.units)}"></label></div>
     <label>Title<input id="e-title" value="${esc(c.title)}" placeholder="Copy from NUSMods"></label>
-    <div class="row2">
+    <div>
       <label>Counts toward<select id="e-bucket"><option value="auto">Automatic${c.bucket==="auto"&&LAST&&LAST.R.where[c.id]?` (now: ${esc(major().groups.find(g=>g.k===LAST.R.where[c.id]).name)})`:""}</option>${major().groups.map(g=>`<option value="${g.k}" ${c.bucket===g.k?"selected":""}>${esc(g.name)}</option>`).join("")}</select></label>
-      <label>Course type<select id="e-tag"><option value="">Normal</option><option value="ID" ${c.tag==="ID"?"selected":""}>Interdisciplinary (ID)</option><option value="CD" ${c.tag==="CD"?"selected":""}>Cross-disciplinary (CD)</option><option value="IE" ${c.tag==="IE"?"selected":""}>Industry Experience</option></select></label>
     </div>
     <div class="row2">
-      <label>Term<select id="e-term">${TERMS.map(t=>`<option value="${t.id}" ${t.id===f.t?"selected":""}>Year ${t.y} ${t.label}</option>`).join("")}</select></label>
+      <label>Course type<select id="e-tag"><option value="">Normal</option><option value="ID" ${c.tag==="ID"?"selected":""}>Interdisciplinary (ID)</option><option value="CD" ${c.tag==="CD"?"selected":""}>Cross-disciplinary (CD)</option><option value="IE" ${c.tag==="IE"?"selected":""}>Industry Experience</option></select></label>
       <label>Status<select id="e-done"><option value="0">Planned</option><option value="2" ${!c.done&&c.prog?"selected":""}>In progress</option><option value="1" ${c.done?"selected":""}>Completed</option></select></label>
     </div>
+    <label>Term<select id="e-term">${TERMS.map(t=>`<option value="${t.id}" ${t.id===f.t?"selected":""}>Year ${t.y} ${t.label}</option>`).join("")}</select></label>
     <div class="dlg-f"><button type="button" class="btn danger" id="e-del">Remove</button><div><button type="button" class="btn" id="e-cancel">Cancel</button><button type="button" class="btn primary" id="e-save">Save</button></div></div>`);
   $("#e-cancel").onclick=closeDlg;
   $("#e-del").onclick=()=>{ state.terms[f.t].splice(f.i,1); save(); render(); closeDlg(); toast(`Removed ${c.code}`); };
