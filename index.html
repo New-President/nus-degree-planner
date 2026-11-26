@@ -46,6 +46,14 @@ img{max-width:100%}
   color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+/* scrollbars follow the theme: a rounded thumb with no arrow buttons, orange on hover. Browsers without
+   ::-webkit-scrollbar (Firefox) use the standard properties; setting those elsewhere would override the pseudo-elements */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+html::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--field) 60%,var(--bg));background-clip:padding-box;border:2px solid transparent;border-radius:999px;min-height:32px}
+::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background-color:var(--accent)}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--field) 60%,var(--bg)) transparent}}
 .wrap{max-width:1380px;margin:0 auto;padding-inline:16px;padding-block:20px 48px;display:flex;flex-direction:column;gap:18px}
 h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
 h1{font-size:clamp(1.5rem,1.1rem + 1.6vw,2.2rem);font-weight:700;letter-spacing:-.01em}
@@ -103,7 +111,6 @@ html.theme-anim .theme-sw svg{transition:transform .45s cubic-bezier(.34,1.45,.5
 .multi-pop label.opt:hover{background:var(--bg)}
 .multi-pop input{accent-color:var(--accent);width:16px;height:16px;flex:none}
 .multi-pop .hint{font-size:.75rem;color:var(--muted);font-weight:400;padding:4px 8px 6px;text-transform:none;letter-spacing:0}
-.req.extra{border-color:var(--navy)}
 .bk.ex{background:var(--navy-soft);color:var(--navy)}
 .warn-text{color:var(--bad);font-weight:600}
 .sources{font-size:.76rem;color:var(--muted)}
@@ -155,12 +162,17 @@ html.theme-anim .theme-sw svg{transition:transform .45s cubic-bezier(.34,1.45,.5
 
 /* main layout */
 .main{display:grid;grid-template-columns:330px minmax(0,1fr);gap:18px;align-items:start}
-.rail{display:flex;flex-direction:column;gap:10px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow:auto;padding-right:2px}
+.rail{display:flex;flex-direction:column;gap:10px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow:auto;padding-right:6px}
 .req{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:8px}
 .req-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .req-h .n{font-size:.82rem;color:var(--muted);white-space:nowrap;flex-shrink:0}
 .req-h h2{min-width:0}
 .req-h .n b{color:var(--ink)}
+/* requirement cards: outlined on hover; click one to keep it highlighted along with the courses in your plan that belong to it */
+.req[data-card]{cursor:pointer}
+@media (hover:hover){.req[data-card]:hover{border-color:var(--navy)}}
+.req.sel{border-color:var(--navy);box-shadow:inset 0 0 0 1px var(--navy);background:color-mix(in srgb,var(--navy) 7%,var(--surface))}
+.req.sel .card-title::after{content:"";display:inline-block;width:8px;height:8px;margin-left:9px;vertical-align:calc(.35em - 3.7px);vertical-align:calc(.5cap - 3.7px);border-radius:50%;background:var(--navy);box-shadow:0 0 0 3px color-mix(in srgb,var(--navy) 28%,transparent),0 0 10px 3px var(--navy)}
 .mini{height:6px;background:var(--sunk);border-radius:3px;position:relative;overflow:hidden}
 .mini .pl{position:absolute;inset:0 auto 0 0;background:var(--navy-soft)}
 .mini .dn{position:absolute;inset:0 auto 0 0;background:var(--accent)}
@@ -204,6 +216,7 @@ body.is-dragging{cursor:grabbing}
 body.is-dragging *{cursor:grabbing!important}
 .course.is-done{background:var(--ok-soft);border-color:transparent}
 .course.ph{border-style:dashed;background:transparent}
+.course.sel{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy),0 0 10px color-mix(in srgb,var(--navy) 55%,transparent)}
 .tick{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--muted);background:var(--surface);display:grid;place-items:center;padding:0}
 .is-done .tick{background:var(--ok);border-color:var(--ok);color:var(--surface)}
 .tick svg{width:14px;height:14px}
@@ -302,7 +315,7 @@ body.is-dragging *{cursor:grabbing!important}
 
   <p class="note">Unofficial student-made tool. Not affiliated with or endorsed by NUS. Course data comes live from the <a href="https://nusmods.com" target="_blank" rel="noopener">NUSMods</a> API. Requirements follow each programme's official page for recent cohorts and change by intake year, so always confirm with your EduRec degree audit. Your plan is saved only in this browser. Use Export to back it up.</p>
   <p class="sources" id="sources"></p>
-  <p class="sources">Spotted a wrong requirement, or want your programme added in detail? <a href="https://github.com/lucaschen1108/nus-degree-planner/issues" target="_blank" rel="noopener">Report it on GitHub</a>.</p>
+  <p class="sources">Spotted a wrong requirement, or want your programme added in detail? <a href="https://github.com/New-President/nus-degree-planner/issues" target="_blank" rel="noopener">Report it on GitHub</a>.</p>
 </div>
 
 <datalist id="catalog"></datalist>
@@ -501,12 +514,14 @@ function evaluate(prog, isMajor, rank){
   const put = (G,c,s)=>{ const u=+c.units||0; G.items.push(c); G.pl+=u; if(c.done) G.dn+=u; if(s){ s.items.push(c); s.u+=u; } where[c.id]=G.g.k; };
   const ueG = gs.find(G=>G.g.ue);
   const seqd = ordered().map((o,i)=>({c:o.c,i,r:rank?rank(o.c):0})).sort((a,b)=>(a.r-b.r)||(a.i-b.i));
+  /* slots marked "first" take matching courses before the others, whatever order they are listed in */
+  gs.forEach(G=>{ G.fill = [...G.slots].sort((a,b)=>(b.r.first?1:0)-(a.r.first?1:0)); });
   for(const {c} of seqd){
     if(isMajor && c.bucket && c.bucket!=="auto"){ const G=gs.find(G=>G.g.k===c.bucket); if(G){ put(G,c,null); continue; } }
     if(isMajor && c.bucket==="ue" && ueG){ put(ueG,c,null); continue; }
     let placed=false;
     for(const G of gs){
-      for(const s of G.slots){ if(!slotFull(s) && match(s.r.any,c)){ put(G,c,s); placed=true; break; } }
+      for(const s of G.fill){ if(!slotFull(s) && match(s.r.any,c)){ put(G,c,s); placed=true; break; } }
       if(placed) break;
     }
     if(placed) continue;
@@ -695,10 +710,21 @@ const GRIP = '<svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2.5" cy="
 const status = (dn,pl,ip)=> dn ? '<span class="pill done">Done</span>' : ip ? '<span class="pill prog">In progress</span>' : pl ? '<span class="pill plan">Planned</span>' : '<span class="pill miss">Missing</span>';
 const rowStatus = r => r.limit ? (r.pl ? '<span class="pill done">OK</span>' : '<span class="pill miss">Too many</span>') : r.soft ? '<span class="pill plan">Optional</span>' : status(r.dn,r.pl);
 let LAST = null;
+/* the highlighted requirement card (not saved), and the course ids belonging to each card */
+let selCard = null, CARDS = {};
+function applySelection(){
+  const ids = CARDS[selCard];
+  document.querySelectorAll(".req[data-card]").forEach(n=>{
+    const on = n.dataset.card===selCard;
+    n.classList.toggle("sel", on);
+    n.querySelector(".card-title").setAttribute("aria-pressed", on);
+  });
+  document.querySelectorAll(".course[data-id]").forEach(n=>n.classList.toggle("sel", !!ids && ids.has(n.dataset.id)));
+}
 
-function progressHead(name, dn, pl, units, cls, ip){
+function progressHead(name, dn, pl, units, cls, ip, card){
   ip = ip||0;
-  return `<div class="req ${cls||""}"><div class="req-h"><h2>${esc(name)}</h2><span class="n tnum"><b>${dn}</b>${ip?` <span class="ipn">+${ip}</span>`:""} / ${units}${pl>dn+ip?` · ${pl} pl`:""}</span></div>
+  return `<div class="req ${cls||""}" data-card="${esc(card)}"><div class="req-h"><h2><span class="card-title" role="button" tabindex="0" aria-pressed="false">${esc(name)}</span></h2><span class="n tnum"><b>${dn}</b>${ip?` <span class="ipn">+${ip}</span>`:""} / ${units}${pl>dn+ip?` · ${pl} pl`:""}</span></div>
     <div class="mini"><div class="pl" style="width:${pct(pl,units)}%"></div><div class="ip" style="width:${pct(dn+ip,units)}%"></div><div class="dn" style="width:${pct(dn,units)}%"></div></div>`;
 }
 function chipFor(c){ return `<span class="chip ${c.done?"done":inProg(c)?"prog":"plan"}" title="${esc(c.title||"")}${inProg(c)?" · in progress":""}">${esc(c.code)}</span>`; }
@@ -706,16 +732,22 @@ function addChip(code,title){
   const label = phOf(code) ? code.replace(/(X+)$/,m=>m.toLowerCase()) : code;
   return `<button type="button" class="chip add" data-quick="${esc(code)}" title="${esc(title||("Add "+code+" to the next open term"))}">+ ${esc(label)}</button>`;
 }
-function groupBody(G, inPlan){
+function groupBody(G, inPlan, ids){
   let chips="", rows="";
+  /* ids collects the planned courses this card is about: those counted here plus those shown as added primaries */
+  if(ids) G.items.forEach(c=>ids.add(c.id));
+  const primaryChip = k=>{ const c=inPlan(k); if(!c) return addChip(k); if(ids) ids.add(c.id); return chipFor(c); };
+  /* patterns claimed by one row (lists): that row shows all such courses in the group, the other rows leave them out */
+  const claimed = G.slots.map(s=>s.r.lists).filter(Boolean);
   G.slots.forEach(s=>{
-    const multi = s.r.pick>1 || s.r.units;
+    const multi = s.r.pick>1 || s.r.units || s.r.row;
+    const listed = s.r.lists ? G.items.filter(c=>match([s.r.lists],c)) : s.items.filter(c=>!(claimed.length && match(claimed,c)));
     if(!multi){
       if(s.items.length) chips += chipFor(s.items[0]);
       else { const q=quickCode(s.r.any); chips += q ? addChip(q, s.r.label) : `<span class="chip" title="${esc(s.r.label)}">${esc(s.r.label)}</span>`; }
     } else {
       const have = s.r.units ? `${s.u}/${s.r.units}u` : `${s.items.length}/${s.r.pick}`;
-      rows += `<div><span class="lbl">${esc(s.r.label)} (${have})${s.items.length?` · ${s.items.map(c=>esc(c.code)).join(", ")}`:""}</span>${status(s.doneFull,s.full,s.progFull)}</div>`;
+      rows += `<div><span class="lbl">${esc(s.r.label)} (${have})${listed.length?`${claimed.length?"<br>":" "}· ${listed.map(c=>esc(c.code)).join(", ")}`:""}</span>${status(s.doneFull,s.full,s.progFull)}</div>`;
     }
   });
   G.rows.forEach(r=>{ rows += `<div><span class="lbl">${esc(r.label)}</span>${rowStatus(r)}</div>`; });
@@ -727,13 +759,13 @@ function groupBody(G, inPlan){
     const picked = chosenFocusNames();
     const tracked = picked.length ? G.focus.filter(f=>picked.includes(f.name)) : G.focus.filter(f=>f.n>0).slice(0,3);
     (tracked.length ? tracked : G.focus.slice(0,1)).forEach(fa=>{
-      html += `<div class="eyebrow">${esc(fa.name)} primaries</div><div class="chips">${fa.list.filter(k=>k!=="CS2103").map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
+      html += `<div class="eyebrow">${esc(fa.name)} primaries</div><div class="chips">${fa.list.filter(k=>k!=="CS2103").map(primaryChip).join("")}</div>`;
     });
   }
   /* requirement rows that carry a course list (e.g. a focus-area specialisation): one-click chips */
   G.slots.forEach(s=>{
     if(!s.r.chips) return;
-    html += `<div class="eyebrow">Primaries</div><div class="chips">${s.r.any.filter(concrete).map(k=>{ const c=inPlan(k); return c?chipFor(c):addChip(k); }).join("")}</div>`;
+    html += `<div class="eyebrow">Primaries</div><div class="chips">${s.r.any.filter(concrete).map(primaryChip).join("")}</div>`;
   });
   /* elective groups recommend from the chosen specialisation(s) when there are any (groups with focus-area
      chips keep their own suggestions, e.g. Industry Experience) */
@@ -838,20 +870,20 @@ function render(){
   /* rail */
   const pil = R.gs.filter(G=>G.g.pillar);
   let html = "";
+  CARDS = {};
   if(pil.length){
     const units=pil.reduce((a,G)=>a+G.g.units,0);
-    html += progressHead(pil.length>6 ? "Common Curriculum" : "University Pillars", pil.reduce((a,G)=>a+G.dnC,0), pil.reduce((a,G)=>a+G.plC,0), units, "", pil.reduce((a,G)=>a+G.ipC,0))
+    CARDS.pillars = new Set(pil.flatMap(G=>G.items.map(c=>c.id)));
+    html += progressHead(pil.length>6 ? "Common Curriculum" : "University Pillars", pil.reduce((a,G)=>a+G.dnC,0), pil.reduce((a,G)=>a+G.plC,0), units, "", pil.reduce((a,G)=>a+G.ipC,0), "pillars")
       + `<div class="sub">${pil.map(G=>{ const s=G.slots[0], c=s.items[0];
           return `<div><span class="lbl">${esc(G.g.name)}${c?` · ${esc(c.code)}`:""}</span>${c?status(s.doneFull,s.full,s.progFull):(()=>{const q=quickCode(s.r.any);return q?addChip(q,s.r.label):status(false,false);})()}</div>`; }).join("")}</div></div>`;
   }
-  R.gs.filter(G=>!G.g.pillar).forEach(G=>{
-    html += progressHead(G.g.name, G.dnC, G.plC, G.g.units, "", G.ipC) + groupBody(G, inPlan) + `</div>`;
-  });
-  X.forEach(x=>{
+  const extraCard = x=>{
     const label = `${kindName(x.prog)} · ${x.prog.name}`;
-    html += progressHead(label, x.R.dn, x.R.pl, x.prog.units, "extra", x.R.ip);
+    const key = "x:"+x.k, ids = CARDS[key] = new Set();
+    html += progressHead(label, x.R.dn, x.R.pl, x.prog.units, "extra", x.R.ip, key);
     if(x.blocked) html += `<div class="sub"><span class="lbl warn-text">Not open to ${esc(M.name)} students.</span></div>`;
-    x.R.gs.forEach(G=>{ html += `<div class="eyebrow">${esc(G.g.name)} · ${G.plC}/${G.g.units}</div>` + groupBody(G, inPlan); });
+    x.R.gs.forEach(G=>{ html += `<div class="eyebrow">${esc(G.g.name)} · ${G.plC}/${G.g.units}</div>` + groupBody(G, inPlan, ids); });
     const need = x.prog.units - (x.prog.share||0);
     const shareRows = x.prog.share==null ? "" : `
         <div><span class="lbl">${x.prog.kind==="ddp"?"Double counted with your first degree":"Shared with other requirements"} (max ${x.prog.share})</span><span class="pill ${x.shared>x.prog.share?"miss":"done"} tnum">${x.shared}u</span></div>
@@ -860,7 +892,17 @@ function render(){
     const cohort = x.prog.kind==="spec" ? "Optional specialisation inside your major. " : x.prog.cohort ? x.prog.cohort+". " : "";
     html += `<div class="sub">${shareRows}
         <div><span class="lbl">${esc(ddpNote+cohort)}${x.prog.note?esc(x.prog.note):""}</span></div></div></div>`;
+  };
+  /* specialisations sit right after the group that tracks focus areas (CS Breadth & Depth); other extras, and
+     specialisations of majors without such a group, come after all the major's groups */
+  const main = R.gs.filter(G=>!G.g.pillar);
+  const inline = main.some(G=>G.focus) ? X.filter(x=>x.prog.kind==="spec") : [];
+  main.forEach(G=>{
+    const key = "g:"+G.g.k, ids = CARDS[key] = new Set();
+    html += progressHead(G.g.name, G.dnC, G.plC, G.g.units, "", G.ipC, key) + groupBody(G, inPlan, ids) + `</div>`;
+    if(G.focus) inline.forEach(extraCard);
   });
+  X.filter(x=>!inline.includes(x)).forEach(extraCard);
   $("#rail").innerHTML = html;
 
   /* sources */
@@ -908,6 +950,7 @@ function render(){
     yh += `</div></section>`;
   }
   $("#years").innerHTML = yh;
+  applySelection();
 }
 
 /* ---------- actions ---------- */
@@ -1073,6 +1116,12 @@ document.addEventListener("click", e=>{
     toast(state.current ? `${termName(state.current)} set as your current semester` : "Current semester cleared"); return; }
   const st = e.target.closest("[data-st]");
   if(st){ state.showST[st.dataset.st]=true; save(); render(); const inp=document.getElementById("add-"+st.dataset.st); if(inp) inp.focus(); return; }
+  const card = e.target.closest("[data-card]");
+  if(card){ selCard = selCard===card.dataset.card ? null : card.dataset.card; applySelection(); }
+});
+document.addEventListener("keydown", e=>{
+  if(e.key==="Escape" && selCard && !$("#dlg-root").firstChild){ selCard=null; applySelection(); }
+  if((e.key==="Enter" || e.key===" ") && e.target.classList.contains("card-title")){ e.preventDefault(); e.target.click(); }
 });
 document.addEventListener("submit", e=>{
   if(e.target.id==="exm-form"){

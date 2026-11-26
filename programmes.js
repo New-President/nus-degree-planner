@@ -838,9 +838,11 @@ const BZA_SRC = {label:"BZA specialisations", url:SOC+"ba/ba-25-26"}, BAIS_SRC =
 const SPECS = {
   cs: Object.fromEntries(Object.entries(CS_FOCUS).map(([n,list])=>[n.toLowerCase().replace(/[^a-z]+/g,"-"),
     spec(`${n} (focus area)`, {label:"CS focus areas", url:"https://www.comp.nus.edu.sg/programmes/ug/focus/"},
-      [{k:"all", name:"Focus area primaries", units:12, reqs:[{label:`3 ${n} primaries, at least one at level 4000`, any:list.filter(c=>c!=="CS2103"), pick:3, chips:true,
-        starter:[...list.filter(c=>c!=="CS2103"&&!/^CS4/.test(c)).slice(0,2), list.find(c=>/^CS4/.test(c))]}],
-        checks:[{t:"minCount", label:"At least one at level 4000", any:["@4+"], n:1}]}])])),
+      [{k:"all", name:"Focus area primaries", units:12, reqs:[
+        /* 3 primaries with at least one at level 4000: the level-4000 row is filled first (first) and lists every 4000+ course */
+        {label:`2 ${n} primaries`, any:list.filter(c=>c!=="CS2103"), pick:2, chips:true,
+          starter:list.filter(c=>c!=="CS2103"&&!/^CS4/.test(c)).slice(0,2)},
+        {label:"At least one at level 4000", any:list.filter(c=>/^CS4/.test(c)), pick:1, row:true, first:true, lists:"@4+"}]}])])),
   bza: {
     fin: spec("Financial Analytics", BZA_SRC, pick5("5 courses from the Financial Analytics list", ["BT3102","BT4012","BT4013","BT4016","BT4221","IS4226","IS4228","IS4234","IS4302","IS4303"])),
     ml:  spec("Machine Learning-based Analytics", BZA_SRC, pick5("5 courses from the ML-based Analytics list", ["BT3017","BT4012","BT4014","BT4221","BT4222","BT4240","BT4241","BT4301","CS3243","CS4248","IS4246"])),
